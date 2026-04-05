@@ -1,29 +1,39 @@
-# Web App
+# # Web App
+# streamlit==1.33.0
+
+# # Core Data
+# pandas==2.1.4
+# numpy==1.26.2
+
+# # ML Models
+# scikit-learn==1.4.2
+# xgboost==2.0.3
+# lightgbm==4.3.0
+
+# # Deep Learning (optional but supported)
+# tensorflow-cpu==2.15.0
+# # Visualization
+# plotly==5.20.0
+# matplotlib==3.8.4
+# seaborn==0.13.2
+
+# # Statistical / Time Series
+# scipy==1.11.4
+# statsmodels==0.14.1
+# pmdarima==2.0.4
+
+# # Utilities
+# tqdm==4.66.4
+# joblib==1.4.2
+# openpyxl==3.1.2
+# typing-extensions==4.11.0
+
 streamlit==1.33.0
 
-# Core Data
 pandas==2.1.4
 numpy==1.26.2
-
-# ML Models
 scikit-learn==1.4.2
-xgboost==2.0.3
-lightgbm==4.3.0
 
-# Deep Learning (optional but supported)
-tensorflow-cpu==2.15.0
-# Visualization
-plotly==5.20.0
 matplotlib==3.8.4
 seaborn==0.13.2
-
-# Statistical / Time Series
-scipy==1.11.4
-statsmodels==0.14.1
-pmdarima==2.0.4
-
-# Utilities
-tqdm==4.66.4
-joblib==1.4.2
-openpyxl==3.1.2
-typing-extensions==4.11.0
+plotly==5.20.0
