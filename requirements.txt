@@ -7,13 +7,12 @@
 pandas==2.1.4
 numpy==1.26.2
 scikit-learn==1.4.2
-# ML Models
-scikit-learn==1.4.2
-xgboost==2.0.3
-lightgbm==4.3.0
+# ML Models (optional on Streamlit Cloud)
+# xgboost==2.0.3
+# lightgbm==4.3.0
 
 # # Deep Learning (optional but supported)
-tensorflow-cpu==2.15.0
+# tensorflow-cpu==2.15.0
 # # Visualization
 # plotly==5.20.0
 # matplotlib==3.8.4
