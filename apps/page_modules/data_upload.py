@@ -1,5 +1,6 @@
 """Data upload page for Demand Forecasting Dashboard"""
 import os
+import sys
 import pandas as pd
 import streamlit as st
 import subprocess
@@ -114,7 +115,7 @@ def page_data_upload():
                         st.error(f"❌ `main.py` not found at: `{main_script_path}`")
                     else:
                         result = subprocess.run(
-                            ["python", str(main_script_path)],
+                            [sys.executable, str(main_script_path)],
                             capture_output=True,
                             text=True,
                             cwd=str(SCRIPTS_PATH),
