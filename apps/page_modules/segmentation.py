@@ -1,4 +1,4 @@
-"""Segmentation and Rules page for Demand Forecasting Dashboard"""
+"""Segmentation page for Demand Forecasting Dashboard"""
 import pandas as pd
 import streamlit as st
 import plotly.express as px
@@ -9,18 +9,12 @@ def page_segmentation_and_rules():
     """Page for displaying Segmentation and Rules data"""
     # Load data from CSV files
     seg_df_path = (OUTPUTS_PATH / "seg_df.csv").resolve()
-    rules_df_path = (OUTPUTS_PATH / "rules_df.csv").resolve()
-    
     seg_df = None
-    rules_df = None
     
     # Check if files exist
     missing_files = []
     if not seg_df_path.exists():
         missing_files.append("seg_df.csv")
-    if not rules_df_path.exists():
-        missing_files.append("rules_df.csv")
-    
     if missing_files:
         st.error("Segmentation outputs not available.")
         st.info(f"""
@@ -40,13 +34,8 @@ def page_segmentation_and_rules():
     else:
         st.error(f" Segmentation file not found at: `{seg_df_path}`")
     
-    if rules_df_path.exists():
-        rules_df = load_csv_file(rules_df_path)
-    else:
-        st.error(f" Rules file not found at: `{rules_df_path}`")
-    
-    # Use tabs to separate Segmentation and Rules
-    tab1, tab2 = st.tabs(["Segmentation", "Rules"])
+    # Use tabs to separate Segmentation
+    tab1, = st.tabs(["Segmentation"])
     
     # Segmentation Tab
     with tab1:
@@ -458,6 +447,7 @@ def page_segmentation_and_rules():
                             st.info("Could not create Volume-Variability matrix")
         else:
             st.warning("No segmentation data available. Please ensure the segmentation file exists.")
+        return
     
     # Rules Tab
     with tab2:
