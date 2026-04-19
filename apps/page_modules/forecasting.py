@@ -272,9 +272,6 @@ def page_forecasting():
                     st.warning(" No MAPE entry found for the selected store-item.")
             else:
                 st.info("Select a store and item to view MAPE.")
-        else:
-            st.info("Baseline forecasting data not available.")
-
     # ----------------------------
     # Statistical Forecasting Tab
     # ----------------------------
@@ -1660,5 +1657,5 @@ def page_forecasting():
             else:
                 st.info("Please select a specific Store and Item to view the probability forecast visualization.")
         elif not missing_prob:
-            st.warning("Probability forecast data not available. Please ensure the probability forecast file exists.")
+            st.info("Probability forecast files are present, but no rows were generated yet.")
 

@@ -106,6 +106,22 @@ def _ensure_probability_placeholders() -> None:
             "q95",
         ],
     )
+    _save_placeholder_csv(
+        DATA_OUTPUTS_DIR / "future_probability_forecasts.csv",
+        [
+            "date",
+            "store_id",
+            "item_id",
+            "point_forecast",
+            "q05",
+            "q10",
+            "q25",
+            "q50",
+            "q75",
+            "q90",
+            "q95",
+        ],
+    )
 
 
 def _ensure_statistical_placeholders() -> None:
@@ -122,22 +138,6 @@ def _ensure_statistical_placeholders() -> None:
     _save_placeholder_csv(
         DATA_OUTPUTS_DIR / "best_fit_df.csv",
         ["store_id", "item_id", "best_fit_algorithm", "best_mape"],
-    )
-    _save_placeholder_csv(
-        DATA_OUTPUTS_DIR / "future_probability_forecasts.csv",
-        [
-            "date",
-            "store_id",
-            "item_id",
-            "point_forecast",
-            "q05",
-            "q10",
-            "q25",
-            "q50",
-            "q75",
-            "q90",
-            "q95",
-        ],
     )
 
 
