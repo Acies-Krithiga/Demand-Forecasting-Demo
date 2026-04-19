@@ -87,6 +87,60 @@ def _ensure_ml_placeholders() -> None:
     )
 
 
+def _ensure_probability_placeholders() -> None:
+    """Create probability output files so the dashboard can load safely after partial failures."""
+    DATA_OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+    _save_placeholder_csv(
+        DATA_OUTPUTS_DIR / "prob_residuals.csv",
+        [
+            "date",
+            "store_id",
+            "item_id",
+            "point_forecast",
+            "q05",
+            "q10",
+            "q25",
+            "q50",
+            "q75",
+            "q90",
+            "q95",
+        ],
+    )
+
+
+def _ensure_statistical_placeholders() -> None:
+    """Create statistical output files so the dashboard can load safely after partial failures."""
+    DATA_OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+    _save_placeholder_csv(
+        DATA_OUTPUTS_DIR / "stat_forecasting.csv",
+        ["date", "store_id", "item_id", "actual"],
+    )
+    _save_placeholder_csv(
+        DATA_OUTPUTS_DIR / "future_statforecast.csv",
+        ["date", "store_id", "item_id", "algorithm", "forecast"],
+    )
+    _save_placeholder_csv(
+        DATA_OUTPUTS_DIR / "best_fit_df.csv",
+        ["store_id", "item_id", "best_fit_algorithm", "best_mape"],
+    )
+    _save_placeholder_csv(
+        DATA_OUTPUTS_DIR / "future_probability_forecasts.csv",
+        [
+            "date",
+            "store_id",
+            "item_id",
+            "point_forecast",
+            "q05",
+            "q10",
+            "q25",
+            "q50",
+            "q75",
+            "q90",
+            "q95",
+        ],
+    )
+
+
 def read_csv_or_fail(path: Path) -> pd.DataFrame:
     if not path.exists():
         raise FileNotFoundError(f"Missing file: {path}")
@@ -136,15 +190,26 @@ def run_probability_forecast() -> None:
     hist_df = read_csv_or_warn(DATA_INPUTS_DIR / "sales_fact.csv", step_name)
     future_df = read_csv_or_warn(DATA_OUTPUTS_DIR / "future_statforecast.csv", step_name)
     if hist_df is None or future_df is None:
+        _ensure_probability_placeholders()
         return
 
-    prob = ProbabilityForecasting(hist_df, future_df)
-    print("Calculating residuals...")
-    residuals_df = prob.generate_probability_forecasts()
     DATA_OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
-    residuals_df.to_csv(DATA_OUTPUTS_DIR / "prob_residuals.csv", index=False)
-    residuals_df.to_csv(DATA_OUTPUTS_DIR / "future_probability_forecasts.csv", index=False)
-    logger.info("[%s] Saved: %s, %s", step_name, DATA_OUTPUTS_DIR / "prob_residuals.csv", DATA_OUTPUTS_DIR / "future_probability_forecasts.csv")
+
+    try:
+        prob = ProbabilityForecasting(hist_df, future_df)
+        print("Calculating residuals...")
+        residuals_df = prob.generate_probability_forecasts()
+        if residuals_df is None or residuals_df.empty:
+            logger.warning("[%s] Probability forecasting returned no rows.", step_name)
+            _ensure_probability_placeholders()
+            return
+
+        residuals_df.to_csv(DATA_OUTPUTS_DIR / "prob_residuals.csv", index=False)
+        residuals_df.to_csv(DATA_OUTPUTS_DIR / "future_probability_forecasts.csv", index=False)
+        logger.info("[%s] Saved: %s, %s", step_name, DATA_OUTPUTS_DIR / "prob_residuals.csv", DATA_OUTPUTS_DIR / "future_probability_forecasts.csv")
+    except Exception as e:
+        logger.warning("[%s] Skipping due to runtime error: %s", step_name, e)
+        _ensure_probability_placeholders()
 
 
 def run_segmentation_pipeline() -> None:
@@ -279,6 +344,7 @@ def run_statistical_pipeline() -> None:
     sales_df = read_csv_or_warn(DATA_INPUTS_DIR / "sales_fact.csv", step_name)
     rules_df = read_csv_or_warn(DATA_OUTPUTS_DIR / "rules_df.csv", step_name)
     if sales_df is None or rules_df is None:
+        _ensure_statistical_placeholders()
         return
 
     max_rules = int(os.getenv("STAT_MAX_RULES", "25"))
@@ -297,6 +363,7 @@ def run_statistical_pipeline() -> None:
         from src.forecast.statistical.generate_bestfit import ForecastGenerator
     except Exception as e:
         logger.warning("[%s] Skipping. Dependencies unavailable: %s", step_name, e)
+        _ensure_statistical_placeholders()
         return
 
     DATA_OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -304,6 +371,7 @@ def run_statistical_pipeline() -> None:
     stat_df = DemandForecastingSystem(rules_df, sales_df).run_forecasting()
     if stat_df is None or stat_df.empty:
         logger.warning("[%s] Skipping. Validation forecasting returned no rows.", step_name)
+        _ensure_statistical_placeholders()
         return
     stat_path = DATA_OUTPUTS_DIR / "stat_forecasting.csv"
     stat_df.to_csv(stat_path, index=False)
@@ -311,6 +379,7 @@ def run_statistical_pipeline() -> None:
     best_fit_df = BestFitAnalyzer(stat_df).analyze_all_intersections()
     if best_fit_df is None or best_fit_df.empty:
         logger.warning("[%s] Skipping. Best-fit analysis returned no rows.", step_name)
+        _ensure_statistical_placeholders()
         return
     best_fit_path = DATA_OUTPUTS_DIR / "best_fit_df.csv"
     best_fit_df.to_csv(best_fit_path, index=False)
@@ -318,10 +387,14 @@ def run_statistical_pipeline() -> None:
     future_df = ForecastGenerator(best_fit_df, sales_df).generate_all_forecasts()
     if future_df is None or future_df.empty:
         logger.warning("[%s] Skipping. Future forecasting returned no rows.", step_name)
+        _ensure_statistical_placeholders()
         return
     future_path = DATA_OUTPUTS_DIR / "future_statforecast.csv"
     future_df.to_csv(future_path, index=False)
     logger.info("[%s] Saved: %s, %s, %s", step_name, stat_path, best_fit_path, future_path)
+    _save_placeholder_csv(stat_path, ["date", "store_id", "item_id", "actual"])
+    _save_placeholder_csv(best_fit_path, ["store_id", "item_id", "best_fit_algorithm", "best_mape"])
+    _save_placeholder_csv(future_path, ["date", "store_id", "item_id", "algorithm", "forecast"])
 
 
 def run_ml_pipeline() -> None:

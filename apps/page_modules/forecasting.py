@@ -321,6 +321,11 @@ def page_forecasting():
 
         if missing_stat:
             show_missing_outputs("Statistical Forecasting", missing_stat)
+        elif stat_fcst_df is None and future_stat_df is None and best_fit_df is None:
+            st.info(
+                "Statistical outputs are present, but no rows were produced for the uploaded data yet. "
+                "Try rerunning the pipeline after adding more sales history."
+            )
         
         # Get all unique stores and items from best_fit_df
         all_stores = []
@@ -1125,7 +1130,9 @@ def page_forecasting():
 
         if missing_prob:
             show_missing_outputs("Probability Forecasting", missing_prob)
-        
+        elif prob_fcst_df is None:
+            st.info("Probability forecast file exists, but it could not be loaded.")
+
         if prob_fcst_df is not None and not prob_fcst_df.empty:
             # Get unique stores and items (no algorithm filter)
             all_stores_prob = []
@@ -1652,6 +1659,6 @@ def page_forecasting():
                     st.warning("No probability forecast data found for the selected store-item combination.")
             else:
                 st.info("Please select a specific Store and Item to view the probability forecast visualization.")
-        else:
+        elif not missing_prob:
             st.warning("Probability forecast data not available. Please ensure the probability forecast file exists.")
 
