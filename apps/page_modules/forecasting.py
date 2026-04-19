@@ -52,6 +52,11 @@ def page_forecasting():
 
         if missing_baseline:
             show_missing_outputs("Baseline Forecasting", missing_baseline)
+        elif (base_fcst_df is not None and base_fcst_df.empty) or (base_mape_df is not None and base_mape_df.empty):
+            st.info(
+                "Baseline forecasting files were created, but no valid rows were generated for the uploaded data. "
+                "This usually means the series were too short for the configured validation window."
+            )
 
         if base_fcst_df is not None and not base_fcst_df.empty:
             st.divider()

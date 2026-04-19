@@ -63,7 +63,6 @@ class BaselineForecastingSystem:
         combinations_df = self.sales_fact[self.level_columns].drop_duplicates().reset_index(drop=True)
         
         self.valid_combinations = []
-        validation_cycle = self.validation_cycles[self.frequency]
         
         for idx, row in combinations_df.iterrows():
             intersection_values = {col: row[col] for col in self.level_columns}
@@ -81,8 +80,16 @@ class BaselineForecastingSystem:
                     combined_filter = combined_filter & condition
                 data = self.sales_fact[combined_filter].copy()
             
-            if len(data) >= validation_cycle + self.minimum_data_points:
+            validation_cycle = self._get_validation_cycle(len(data))
+            if validation_cycle > 0:
                 self.valid_combinations.append(intersection_values)
+
+    def _get_validation_cycle(self, data_length: int) -> int:
+        """Pick the largest validation window that still leaves enough training history."""
+        default_cycle = self.validation_cycles[self.frequency]
+        if data_length <= self.minimum_data_points:
+            return 0
+        return max(1, min(default_cycle, data_length - self.minimum_data_points))
         
     def _prepare_combination_data(self, intersection_values):
 
@@ -99,9 +106,9 @@ class BaselineForecastingSystem:
                 combined_filter = combined_filter & condition
             data = self.sales_fact[combined_filter].copy()
         
-        validation_cycle = self.validation_cycles[self.frequency]
+        validation_cycle = self._get_validation_cycle(len(data))
         
-        if len(data) < validation_cycle + self.minimum_data_points:
+        if validation_cycle <= 0:
             return None, None, None
             
         data = data.sort_values(self.date_column)

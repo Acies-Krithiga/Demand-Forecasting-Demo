@@ -31,6 +31,28 @@ DATA_INPUTS_DIR = PROJECT_ROOT / "data" / "inputs"
 DATA_OUTPUTS_DIR = PROJECT_ROOT / "data" / "outputs"
 
 
+def _save_placeholder_csv(path: Path, columns: list[str]) -> None:
+    """Write an empty CSV with headers so downstream pages can load it safely."""
+    pd.DataFrame(columns=columns).to_csv(path, index=False)
+
+
+def _ensure_baseline_placeholders() -> None:
+    """Create baseline output files even when forecasting cannot produce rows."""
+    DATA_OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+    _save_placeholder_csv(
+        DATA_OUTPUTS_DIR / "base_forecast_df.csv",
+        ["date", "actual", "store_id", "item_id", "Moving Average", "Weighted Snaive"],
+    )
+    _save_placeholder_csv(
+        DATA_OUTPUTS_DIR / "mape_baseline_df.csv",
+        ["store_id", "item_id", "ma_mape", "sn_mape"],
+    )
+    _save_placeholder_csv(
+        DATA_OUTPUTS_DIR / "base_future_df.csv",
+        ["date", "store_id", "item_id", "Moving Average", "Weighted Snaive"],
+    )
+
+
 def read_csv_or_fail(path: Path) -> pd.DataFrame:
     if not path.exists():
         raise FileNotFoundError(f"Missing file: {path}")
@@ -139,6 +161,7 @@ def run_baseline_pipeline() -> None:
     step_name = "Baseline"
     sales_df = read_csv_or_warn(DATA_INPUTS_DIR / "sales_fact.csv", step_name)
     if sales_df is None:
+        _ensure_baseline_placeholders()
         return
 
     DATA_OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -156,6 +179,7 @@ def run_baseline_pipeline() -> None:
             from src.forecast.baseline.base_mape import BaselineMAPE
         except Exception as e:
             logger.warning("[%s] Skipping. Baseline dependencies unavailable: %s", step_name, e)
+            _ensure_baseline_placeholders()
             return
 
         baseline_system = BaselineForecastingSystem(sales_df)
@@ -171,6 +195,7 @@ def run_baseline_pipeline() -> None:
         baseline_df = baseline_system.run_forecasting()
         if baseline_df is None or baseline_df.empty:
             logger.warning("[%s] Skipping. Baseline forecasting returned no rows.", step_name)
+            _ensure_baseline_placeholders()
             return
         baseline_df.to_csv(baseline_path, index=False)
 
@@ -203,6 +228,16 @@ def run_baseline_pipeline() -> None:
     except Exception as e:
         logger.info("[%s] Saved: %s, %s", step_name, baseline_path, mape_path)
         logger.warning("[%s] Skipping base future forecasting: %s", step_name, e)
+        if not baseline_path.exists() or not mape_path.exists():
+            _ensure_baseline_placeholders()
+
+
+def safe_run(step_name: str, step_fn) -> None:
+    """Run a pipeline step without letting one unexpected failure stop the rest."""
+    try:
+        step_fn()
+    except Exception as e:
+        logger.exception("[%s] Unhandled pipeline error: %s", step_name, e)
 
 
 def run_statistical_pipeline() -> None:
@@ -502,13 +537,17 @@ def run_eda_pipeline() -> None:
 #print("Base future forecasting completed")
 
 if __name__ == '__main__':
-    run_segmentation_pipeline()
-    run_statistical_pipeline()
-    run_ml_pipeline()
-    run_probability_forecast()
-    run_baseline_pipeline()
-    run_outlier_correction_pipeline()
-    run_eda_pipeline()
-    run_uplift_forecast()
+    pipeline_steps = [
+        ("Segmentation", run_segmentation_pipeline),
+        ("Baseline", run_baseline_pipeline),
+        ("Statistical", run_statistical_pipeline),
+        ("ML", run_ml_pipeline),
+        ("Probability", run_probability_forecast),
+        ("Outlier", run_outlier_correction_pipeline),
+        ("EDA", run_eda_pipeline),
+        ("Uplift", run_uplift_forecast),
+    ]
+    for step_name, step_fn in pipeline_steps:
+        safe_run(step_name, step_fn)
 
 
