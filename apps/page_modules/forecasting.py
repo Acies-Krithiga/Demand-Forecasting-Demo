@@ -323,6 +323,18 @@ def page_forecasting():
                 "Statistical outputs are present, but no rows were produced for the uploaded data yet. "
                 "Try rerunning the pipeline after adding more sales history."
             )
+        elif (
+            stat_fcst_df is not None
+            and future_stat_df is not None
+            and best_fit_df is not None
+            and stat_fcst_df.empty
+            and future_stat_df.empty
+            and best_fit_df.empty
+        ):
+            st.info(
+                "Statistical outputs were created, but the uploaded data did not generate any valid rows yet. "
+                "Try rerunning the pipeline after adding more sales history."
+            )
         
         # Get all unique stores and items from best_fit_df
         all_stores = []
