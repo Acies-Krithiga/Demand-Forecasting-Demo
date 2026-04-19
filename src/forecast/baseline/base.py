@@ -85,11 +85,11 @@ class BaselineForecastingSystem:
                 self.valid_combinations.append(intersection_values)
 
     def _get_validation_cycle(self, data_length: int) -> int:
-        """Pick the largest validation window that still leaves enough training history."""
+        """Pick a validation window that leaves at least one training point."""
         default_cycle = self.validation_cycles[self.frequency]
-        if data_length <= self.minimum_data_points:
+        if data_length < 2:
             return 0
-        return max(1, min(default_cycle, data_length - self.minimum_data_points))
+        return max(1, min(default_cycle, data_length - 1))
         
     def _prepare_combination_data(self, intersection_values):
 
