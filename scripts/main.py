@@ -15,6 +15,7 @@ from pathlib import Path
 from src.Eda.eda import run_eda
 from src.seg_rule.segmentation import Segmentation
 from src.seg_rule.rules import ForecastRuleAssigner
+from config.config import ML_MODELS_CONFIG
 # from src.seg_rule.segmentation import Segmentation
 # from src.seg_rule.rules import ForecastRuleAssigner
 # from src.forecast.statistical.stat_forecast import DemandForecastingSystem
@@ -33,6 +34,8 @@ DATA_OUTPUTS_DIR = PROJECT_ROOT / "data" / "outputs"
 
 def _save_placeholder_csv(path: Path, columns: list[str]) -> None:
     """Write an empty CSV with headers so downstream pages can load it safely."""
+    if path.exists() and path.stat().st_size > 0:
+        return
     pd.DataFrame(columns=columns).to_csv(path, index=False)
 
 
@@ -50,6 +53,37 @@ def _ensure_baseline_placeholders() -> None:
     _save_placeholder_csv(
         DATA_OUTPUTS_DIR / "base_future_df.csv",
         ["date", "store_id", "item_id", "Moving Average", "Weighted Snaive"],
+    )
+
+
+def _ensure_ml_placeholders() -> None:
+    """Create ML output files so the dashboard can load safely after partial failures."""
+    DATA_OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+    _save_placeholder_csv(
+        DATA_OUTPUTS_DIR / "df_feat_selected.csv",
+        ["date", "store_id", "item_id", "units_sold"],
+    )
+    _save_placeholder_csv(
+        DATA_OUTPUTS_DIR / "feature_importance.csv",
+        ["feature", "importance"],
+    )
+    _save_placeholder_csv(
+        DATA_OUTPUTS_DIR / "ml_forecast_df.csv",
+        [
+            "date",
+            "actual",
+            "store_id",
+            "item_id",
+            *ML_MODELS_CONFIG["available_algorithms"],
+        ],
+    )
+    _save_placeholder_csv(
+        DATA_OUTPUTS_DIR / "best_fit_ml_df.csv",
+        ["store_id", "item_id", "best_fit_algorithm", "best_mape"],
+    )
+    _save_placeholder_csv(
+        DATA_OUTPUTS_DIR / "ml_bestfit_predictions_future.csv",
+        ["date", "store_id", "item_id", "algorithm", "prediction"],
     )
 
 
@@ -295,6 +329,9 @@ def run_ml_pipeline() -> None:
     sales_df = read_csv_or_warn(DATA_INPUTS_DIR / "sales_fact.csv", step_name)
     if sales_df is None:
         return
+
+    # Make sure the dashboard has readable outputs even if the ML step aborts partway through.
+    _ensure_ml_placeholders()
 
     try:
         from src.forecast.ml.Feature_engineering.create_features import CreateFeatures

@@ -695,6 +695,11 @@ def page_forecasting():
             show_missing_outputs("ML Forecasting", missing_ml)
         elif feature_importance_df is None:
             st.info("Feature importance file not found. Run feature selection to generate it.")
+        elif (best_fit_ml_df is None or best_fit_ml_df.empty) and (future_ml_df is None or future_ml_df.empty):
+            st.info(
+                "ML outputs are present, but no forecast rows were generated for the uploaded data yet. "
+                "Try rerunning the pipeline after adding more sales history."
+            )
         
         # Initialize filter variables (will be defined in filter section)
         selected_ml_table_store = 'All'
