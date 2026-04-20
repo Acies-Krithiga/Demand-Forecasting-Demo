@@ -9,6 +9,8 @@ wheels/
 # Virtual environments
 .venv
 
-data/
-
+# Large raw/generated datasets that exceed GitHub's 100 MB limit
+data/inputs/sales_fact.csv
+data/outputs/units_sold_corrected.csv
+data/outputs/EDA/df_sales.csv
 
