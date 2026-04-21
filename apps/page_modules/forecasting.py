@@ -23,9 +23,11 @@ def page_forecasting():
         st.subheader("Baseline Forecasting")
         base_fcst_path = (OUTPUTS_PATH / "base_forecast_df.csv").resolve()
         base_mape_path = (OUTPUTS_PATH / "mape_baseline_df.csv").resolve()
+        sales_fact_path = (PROJECT_ROOT / "data" / "inputs" / "sales_fact.csv").resolve()
 
         base_fcst_df = None
         base_mape_df = None
+        sales_df = None
 
         missing_baseline = []
         if base_fcst_path.exists():
@@ -50,6 +52,12 @@ def page_forecasting():
         else:
             missing_baseline.append("mape_baseline_df.csv")
 
+        if sales_fact_path.exists():
+            try:
+                sales_df = pd.read_csv(sales_fact_path)
+            except Exception:
+                sales_df = None
+
         if missing_baseline:
             show_missing_outputs("Baseline Forecasting", missing_baseline)
         elif base_fcst_df is None and base_mape_df is None:
@@ -60,10 +68,23 @@ def page_forecasting():
             and base_fcst_df.empty
             and base_mape_df.empty
         ):
-            st.info(
-                "Baseline forecasting files were created, but no valid rows were generated for the uploaded data. "
-                "This usually means the series were too short for the configured validation window."
-            )
+            if sales_df is not None and {"store_id", "item_id"}.issubset(sales_df.columns):
+                series_counts = sales_df.groupby(["store_id", "item_id"]).size()
+                total_series = int(series_counts.shape[0])
+                min_rows = int(series_counts.min()) if total_series else 0
+                max_rows = int(series_counts.max()) if total_series else 0
+                short_series = int((series_counts < 2).sum()) if total_series else 0
+                st.info(
+                    "Baseline forecasting could not create validation rows for the uploaded data. "
+                    f"Across {total_series} store-item series, the history ranges from {min_rows} to {max_rows} rows, "
+                    f"and {short_series} series have fewer than 2 rows. "
+                    "The baseline split needs at least one training row and one validation row per series."
+                )
+            else:
+                st.info(
+                    "Baseline forecasting could not create validation rows for the uploaded data. "
+                    "The baseline split needs at least one training row and one validation row per series."
+                )
         elif base_fcst_df is not None and base_fcst_df.empty:
             st.info("Baseline validation forecast data is empty, but the MAPE file is available.")
         elif base_mape_df is not None and base_mape_df.empty:
