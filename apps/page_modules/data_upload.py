@@ -1,6 +1,9 @@
 """Data upload page for Demand Forecasting Dashboard"""
 import os
 import sys
+from io import BytesIO
+from urllib.parse import parse_qs, urlparse
+from urllib.request import Request, urlopen
 import pandas as pd
 import streamlit as st
 import subprocess
@@ -21,9 +24,52 @@ def page_data_upload():
     }
     TOTAL_FILES = len(expected_files)
     MANDATORY_FILE_KEY = "sales_fact"
+    SALES_FACT_DRIVE_URL = "https://drive.google.com/file/d/1JkkqVIrFQ1pw5WAs7GRJ5zpAPNZf_Z3Z/view?usp=sharing"
 
     # Create inputs directory if it doesn't exist
     INPUTS_PATH.mkdir(parents=True, exist_ok=True)
+
+    def get_google_drive_direct_url(shared_url: str) -> str:
+        """Convert a Google Drive share link into a direct download URL."""
+        parsed = urlparse(shared_url.strip())
+        query_params = parse_qs(parsed.query)
+
+        if "id" in query_params:
+            file_id = query_params["id"][0]
+        else:
+            file_id = None
+            path_parts = [part for part in parsed.path.split("/") if part]
+            if "d" in path_parts:
+                d_index = path_parts.index("d")
+                if d_index + 1 < len(path_parts):
+                    file_id = path_parts[d_index + 1]
+
+        if not file_id and "/file/d/" in parsed.path:
+            try:
+                file_id = parsed.path.split("/file/d/")[1].split("/")[0]
+            except Exception:
+                file_id = None
+
+        if not file_id:
+            return shared_url
+
+        return f"https://drive.google.com/uc?export=download&id={file_id}"
+
+    def save_csv_from_url(csv_url: str, file_path):
+        """Download a CSV from a URL and save it to disk."""
+        direct_url = get_google_drive_direct_url(csv_url)
+        request = Request(direct_url, headers={"User-Agent": "Mozilla/5.0"})
+        with urlopen(request) as response:
+            content = response.read()
+
+        if not content:
+            raise ValueError("The link returned no content.")
+
+        # Validate that the content is readable as CSV before saving.
+        pd.read_csv(BytesIO(content))
+
+        with open(file_path, "wb") as f:
+            f.write(content)
 
     # Function to check file status
     def check_file_status():
@@ -68,6 +114,23 @@ def page_data_upload():
         key="file_uploader",
         label_visibility="visible"
     )
+
+    if selected_key == MANDATORY_FILE_KEY:
+        auto_sales_fact_path = INPUTS_PATH / f"{MANDATORY_FILE_KEY}.csv"
+        if not auto_sales_fact_path.exists() or auto_sales_fact_path.stat().st_size == 0:
+            try:
+                save_csv_from_url(SALES_FACT_DRIVE_URL, auto_sales_fact_path)
+                if auto_sales_fact_path.exists() and auto_sales_fact_path.stat().st_size > 0:
+                    st.success("✅ Sales fact loaded automatically from Google Drive.")
+                else:
+                    st.error("❌ Automatic Google Drive import created an empty sales fact file.")
+            except Exception as e:
+                st.warning(f"Automatic Google Drive import failed: {e}")
+        else:
+            st.caption("Sales fact is already available locally. You can upload a new CSV to replace it.")
+
+    if selected_key == MANDATORY_FILE_KEY:
+        st.caption("You can still upload a CSV file here to replace the sales fact data.")
 
     if uploaded_file is not None:
         file_path = INPUTS_PATH / f"{selected_key}.csv"
