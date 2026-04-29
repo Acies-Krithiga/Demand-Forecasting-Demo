@@ -171,8 +171,8 @@ def page_data_upload():
     main_script_path = SCRIPTS_PATH / "main.py"
 
     if mandatory_ready:
-        if st.button("🚀 Run main.py"):
-            with st.spinner("Running main.py... please wait ⏳"):
+        if st.button("Run AI Forecasting Engine"):
+            with st.spinner("Running main.py... please wait"):
                 try:
                     if not main_script_path.exists():
                         st.error(f"❌ `main.py` not found at: `{main_script_path}`")
