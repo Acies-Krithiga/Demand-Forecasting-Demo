@@ -1,7 +1,8 @@
 """Shared configuration and utilities for all pages"""
 from pathlib import Path
 from io import BytesIO
-from urllib.parse import parse_qs, urlparse
+import re
+from urllib.parse import parse_qs, urlencode, urlparse
 from urllib.request import Request, urlopen
 import pandas as pd
 import streamlit as st
@@ -57,6 +58,34 @@ def download_csv_from_url(csv_url: str, file_path: Path) -> pd.DataFrame:
 
     if not content:
         raise ValueError("The link returned no content.")
+
+    preview_text = content[:5000].decode("utf-8", errors="ignore")
+    preview_lower = preview_text.lower()
+    if "<html" in preview_lower or "virus scan warning" in preview_lower or "download anyway" in preview_lower:
+        form_action_match = re.search(r'<form[^>]+action="([^"]+)"', preview_text, flags=re.IGNORECASE)
+        hidden_inputs = dict(
+            re.findall(
+                r'<input[^>]+type="hidden"[^>]+name="([^"]+)"[^>]+value="([^"]*)"',
+                preview_text,
+                flags=re.IGNORECASE,
+            )
+        )
+
+        if form_action_match:
+            form_action = form_action_match.group(1)
+            if not form_action.startswith("http"):
+                form_action = f"https://drive.usercontent.google.com{form_action}"
+
+            if "id" not in hidden_inputs:
+                parsed = urlparse(direct_url)
+                hidden_inputs["id"] = parse_qs(parsed.query).get("id", [""])[0]
+            hidden_inputs.setdefault("export", "download")
+            hidden_inputs.setdefault("confirm", "t")
+
+            query_string = urlencode({key: value for key, value in hidden_inputs.items() if value})
+            confirmed_url = f"{form_action}?{query_string}"
+            with urlopen(Request(confirmed_url, headers={"User-Agent": "Mozilla/5.0"})) as response:
+                content = response.read()
 
     df = pd.read_csv(BytesIO(content))
     missing = REQUIRED_SALES_FACT_COLUMNS - set(df.columns)
