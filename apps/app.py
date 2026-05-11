@@ -1,7 +1,14 @@
+import sys
+from pathlib import Path
 import streamlit as st
 import warnings
 
 warnings.filterwarnings('ignore')
+
+# Ensure the repository root is importable before loading page modules.
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 # Import page functions from page_modules module
 from page_modules import (
