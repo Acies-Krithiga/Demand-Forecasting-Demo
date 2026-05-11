@@ -143,12 +143,6 @@ def page_data_upload():
         except Exception as e:
             st.exception(f"Error saving file: {e}")
 
-    sales_fact_df = get_sales_fact_df()
-    if sales_fact_df is not None:
-        st.markdown("---")
-        st.subheader("Preview: `df_sales.head()`")
-        st.dataframe(sales_fact_df.head(), use_container_width=True, hide_index=True)
-
     st.markdown("---")
     st.header("📊 Data Ingestion Status")
 
