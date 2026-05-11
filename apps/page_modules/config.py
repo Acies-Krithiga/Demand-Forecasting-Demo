@@ -52,40 +52,77 @@ def get_google_drive_direct_url(shared_url: str) -> str:
 def download_csv_from_url(csv_url: str, file_path: Path) -> pd.DataFrame:
     """Download a CSV from a URL and save it to disk."""
     direct_url = get_google_drive_direct_url(csv_url)
-    request = Request(direct_url, headers={"User-Agent": "Mozilla/5.0"})
-    with urlopen(request) as response:
-        content = response.read()
+    session = None
+    content = None
 
-    if not content:
-        raise ValueError("The link returned no content.")
+    try:
+        import requests
 
-    preview_text = content[:5000].decode("utf-8", errors="ignore")
-    preview_lower = preview_text.lower()
-    if "<html" in preview_lower or "virus scan warning" in preview_lower or "download anyway" in preview_lower:
-        form_action_match = re.search(r'<form[^>]+action="([^"]+)"', preview_text, flags=re.IGNORECASE)
-        hidden_inputs = dict(
-            re.findall(
-                r'<input[^>]+type="hidden"[^>]+name="([^"]+)"[^>]+value="([^"]*)"',
-                preview_text,
-                flags=re.IGNORECASE,
+        session = requests.Session()
+        response = session.get(direct_url, headers={"User-Agent": "Mozilla/5.0"}, stream=True, timeout=120)
+        response.raise_for_status()
+        content = b"".join(response.iter_content(chunk_size=1024 * 64))
+
+        preview_text = content[:5000].decode("utf-8", errors="ignore")
+        preview_lower = preview_text.lower()
+        if "<html" in preview_lower or "virus scan warning" in preview_lower or "download anyway" in preview_lower:
+            form_action_match = re.search(r'<form[^>]+action="([^"]+)"', preview_text, flags=re.IGNORECASE)
+            hidden_inputs = dict(
+                re.findall(
+                    r'<input[^>]+type="hidden"[^>]+name="([^"]+)"[^>]+value="([^"]*)"',
+                    preview_text,
+                    flags=re.IGNORECASE,
+                )
             )
-        )
 
-        if form_action_match:
-            form_action = form_action_match.group(1)
-            if not form_action.startswith("http"):
-                form_action = f"https://drive.usercontent.google.com{form_action}"
+            if form_action_match:
+                form_action = form_action_match.group(1)
+                if not form_action.startswith("http"):
+                    form_action = f"https://drive.usercontent.google.com{form_action}"
 
-            if "id" not in hidden_inputs:
-                parsed = urlparse(direct_url)
-                hidden_inputs["id"] = parse_qs(parsed.query).get("id", [""])[0]
-            hidden_inputs.setdefault("export", "download")
-            hidden_inputs.setdefault("confirm", "t")
+                if "id" not in hidden_inputs:
+                    parsed = urlparse(direct_url)
+                    hidden_inputs["id"] = parse_qs(parsed.query).get("id", [""])[0]
+                hidden_inputs.setdefault("export", "download")
+                hidden_inputs.setdefault("confirm", "t")
 
-            query_string = urlencode({key: value for key, value in hidden_inputs.items() if value})
-            confirmed_url = f"{form_action}?{query_string}"
-            with urlopen(Request(confirmed_url, headers={"User-Agent": "Mozilla/5.0"})) as response:
-                content = response.read()
+                response = session.get(form_action, params=hidden_inputs, headers={"User-Agent": "Mozilla/5.0"}, stream=True, timeout=120)
+                response.raise_for_status()
+                content = b"".join(response.iter_content(chunk_size=1024 * 64))
+    except Exception:
+        # Fallback to urllib for environments without requests.
+        request = Request(direct_url, headers={"User-Agent": "Mozilla/5.0"})
+        with urlopen(request) as response:
+            content = response.read()
+
+        if content:
+            preview_text = content[:5000].decode("utf-8", errors="ignore")
+            preview_lower = preview_text.lower()
+            if "<html" in preview_lower or "virus scan warning" in preview_lower or "download anyway" in preview_lower:
+                form_action_match = re.search(r'<form[^>]+action="([^"]+)"', preview_text, flags=re.IGNORECASE)
+                hidden_inputs = dict(
+                    re.findall(
+                        r'<input[^>]+type="hidden"[^>]+name="([^"]+)"[^>]+value="([^"]*)"',
+                        preview_text,
+                        flags=re.IGNORECASE,
+                    )
+                )
+
+                if form_action_match:
+                    form_action = form_action_match.group(1)
+                    if not form_action.startswith("http"):
+                        form_action = f"https://drive.usercontent.google.com{form_action}"
+
+                    if "id" not in hidden_inputs:
+                        parsed = urlparse(direct_url)
+                        hidden_inputs["id"] = parse_qs(parsed.query).get("id", [""])[0]
+                    hidden_inputs.setdefault("export", "download")
+                    hidden_inputs.setdefault("confirm", "t")
+
+                    query_string = urlencode({key: value for key, value in hidden_inputs.items() if value})
+                    confirmed_url = f"{form_action}?{query_string}"
+                    with urlopen(Request(confirmed_url, headers={"User-Agent": "Mozilla/5.0"})) as response:
+                        content = response.read()
 
     df = pd.read_csv(BytesIO(content))
     missing = REQUIRED_SALES_FACT_COLUMNS - set(df.columns)
