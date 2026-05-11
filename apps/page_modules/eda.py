@@ -7,7 +7,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from .config import INPUTS_PATH, OUTPUTS_PATH, SALES_FACT_DRIVE_URL, download_csv_from_url
+from .config import INPUTS_PATH, OUTPUTS_PATH, SALES_FACT_DRIVE_URL, download_csv_from_url, is_valid_sales_fact_df
 from src.Eda.eda import run_eda
 
 
@@ -54,15 +54,23 @@ def page_eda():
         sales_fact_path = INPUTS_PATH / "sales_fact.csv"
         if sales_fact_path.exists() and sales_fact_path.stat().st_size > 0:
             try:
-                _write_eda_outputs(pd.read_csv(sales_fact_path))
-                missing = [name for name, path in required_files.items() if not path.exists()]
-                if not missing:
-                    return True, "EDA outputs regenerated from local sales_fact.csv."
+                local_sales_df = pd.read_csv(sales_fact_path)
+                if is_valid_sales_fact_df(local_sales_df):
+                    _write_eda_outputs(local_sales_df)
+                    missing = [name for name, path in required_files.items() if not path.exists()]
+                    if not missing:
+                        return True, "EDA outputs regenerated from local sales_fact.csv."
+                else:
+                    st.warning(
+                        "Local sales_fact.csv is missing required columns, so the app will try the Drive copy instead."
+                    )
             except Exception as e:
-                return False, f"Unable to regenerate EDA outputs from local sales_fact.csv: {e}"
+                st.warning(f"Unable to regenerate EDA outputs from local sales_fact.csv: {e}")
 
         try:
             sales_df = download_csv_from_url(SALES_FACT_DRIVE_URL, sales_fact_path)
+            if not is_valid_sales_fact_df(sales_df):
+                return False, "Drive download succeeded but the CSV schema is invalid."
             _write_eda_outputs(sales_df)
             missing = [name for name, path in required_files.items() if not path.exists()]
             if not missing:

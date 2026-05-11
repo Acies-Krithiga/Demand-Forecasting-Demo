@@ -18,6 +18,7 @@ OUTPUTS_PATH = PROJECT_ROOT / "data" / "outputs"
 INPUTS_PATH = PROJECT_ROOT / "data" / "inputs"
 SCRIPTS_PATH = PROJECT_ROOT / "scripts"
 SALES_FACT_DRIVE_URL = "https://drive.google.com/file/d/1JkkqVIrFQ1pw5WAs7GRJ5zpAPNZf_Z3Z/view?usp=sharing"
+REQUIRED_SALES_FACT_COLUMNS = {"date", "store_id", "item_id", "cat_id", "units_sold"}
 
 
 def get_google_drive_direct_url(shared_url: str) -> str:
@@ -58,9 +59,22 @@ def download_csv_from_url(csv_url: str, file_path: Path) -> pd.DataFrame:
         raise ValueError("The link returned no content.")
 
     df = pd.read_csv(BytesIO(content))
+    missing = REQUIRED_SALES_FACT_COLUMNS - set(df.columns)
+    if missing:
+        raise ValueError(
+            f"Downloaded CSV is missing required columns: {sorted(missing)}. "
+            f"Found columns: {list(df.columns)[:10]}"
+        )
     file_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(file_path, index=False)
     return df
+
+
+def is_valid_sales_fact_df(df: pd.DataFrame) -> bool:
+    """Return True when the dataframe looks like the expected sales_fact.csv."""
+    if df is None or df.empty:
+        return False
+    return REQUIRED_SALES_FACT_COLUMNS.issubset(set(df.columns))
 
 
 def load_csv_file(file_path: Path) -> pd.DataFrame:
