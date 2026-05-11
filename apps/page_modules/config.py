@@ -1,39 +1,15 @@
 """Shared configuration and utilities for all pages"""
 from pathlib import Path
-import os
+from io import BytesIO
+from urllib.parse import parse_qs, urlparse
+from urllib.request import Request, urlopen
 import pandas as pd
 import streamlit as st
 
 
 def get_project_root():
-    """Get project root directory"""
-    try:
-        script_path = Path(__file__).resolve()
-        if script_path.exists():
-            project_root = script_path.parent.parent.parent
-            if (project_root / "data" / "outputs").exists():
-                return project_root
-    except:
-        pass
-    
-    # Method 2: Use current working directory
-    try:
-        cwd = Path(os.getcwd())
-        if (cwd / "data" / "outputs").exists():
-            return cwd
-        # Check if we're in apps/ directory
-        if cwd.name == "apps" and (cwd.parent / "data" / "outputs").exists():
-            return cwd.parent
-    except:
-        pass
-    
-    # Method 3: Try absolute path to known location
-    known_path = Path(r"C:\Users\Pavan\DemandForecasting")
-    if (known_path / "data" / "outputs").exists():
-        return known_path
-    
-    # Fallback: Use __file__ method anyway
-    return Path(__file__).parent.parent.parent
+    """Get project root directory from the location of this module."""
+    return Path(__file__).resolve().parents[2]
 
 
 # Initialize paths
@@ -41,6 +17,50 @@ PROJECT_ROOT = get_project_root()
 OUTPUTS_PATH = PROJECT_ROOT / "data" / "outputs"
 INPUTS_PATH = PROJECT_ROOT / "data" / "inputs"
 SCRIPTS_PATH = PROJECT_ROOT / "scripts"
+SALES_FACT_DRIVE_URL = "https://drive.google.com/file/d/1JkkqVIrFQ1pw5WAs7GRJ5zpAPNZf_Z3Z/view?usp=sharing"
+
+
+def get_google_drive_direct_url(shared_url: str) -> str:
+    """Convert a Google Drive share link into a direct download URL."""
+    parsed = urlparse(shared_url.strip())
+    query_params = parse_qs(parsed.query)
+
+    if "id" in query_params:
+        file_id = query_params["id"][0]
+    else:
+        file_id = None
+        path_parts = [part for part in parsed.path.split("/") if part]
+        if "d" in path_parts:
+            d_index = path_parts.index("d")
+            if d_index + 1 < len(path_parts):
+                file_id = path_parts[d_index + 1]
+
+    if not file_id and "/file/d/" in parsed.path:
+        try:
+            file_id = parsed.path.split("/file/d/")[1].split("/")[0]
+        except Exception:
+            file_id = None
+
+    if not file_id:
+        return shared_url
+
+    return f"https://drive.google.com/uc?export=download&id={file_id}"
+
+
+def download_csv_from_url(csv_url: str, file_path: Path) -> pd.DataFrame:
+    """Download a CSV from a URL and save it to disk."""
+    direct_url = get_google_drive_direct_url(csv_url)
+    request = Request(direct_url, headers={"User-Agent": "Mozilla/5.0"})
+    with urlopen(request) as response:
+        content = response.read()
+
+    if not content:
+        raise ValueError("The link returned no content.")
+
+    df = pd.read_csv(BytesIO(content))
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(file_path, index=False)
+    return df
 
 
 def load_csv_file(file_path: Path) -> pd.DataFrame:
