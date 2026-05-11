@@ -1,18 +1,22 @@
 """Data upload page for Demand Forecasting Dashboard"""
 import os
 import sys
-from io import BytesIO
-from urllib.parse import parse_qs, urlparse
-from urllib.request import Request, urlopen
+import subprocess
+
 import pandas as pd
 import streamlit as st
-import subprocess
-from .config import PROJECT_ROOT, OUTPUTS_PATH, INPUTS_PATH, SCRIPTS_PATH
+
+from .config import (
+    INPUTS_PATH,
+    SCRIPTS_PATH,
+    SALES_FACT_DRIVE_URL,
+    download_csv_from_url,
+    is_valid_sales_fact_df,
+)
 
 
 def page_data_upload():
     """Data upload page"""
-    # File definitions
     expected_files = {
         "sales_fact": {"label": "Sales Fact File (.csv)", "mandatory": True, "description": "Mandatory base data for sales history."},
         "price_fact": {"label": "Price Fact File (.csv)", "mandatory": False, "description": "Historical pricing data."},
@@ -22,64 +26,36 @@ def page_data_upload():
         "location_dim": {"label": "Location Dimension (.csv)", "mandatory": False, "description": "Store or regional information."},
         "promotion_fact": {"label": "Promotion Fact File (.csv)", "mandatory": False, "description": "Promotion details and flags."},
     }
-    TOTAL_FILES = len(expected_files)
-    MANDATORY_FILE_KEY = "sales_fact"
-    SALES_FACT_DRIVE_URL = "https://drive.google.com/file/d/1JkkqVIrFQ1pw5WAs7GRJ5zpAPNZf_Z3Z/view?usp=sharing"
 
-    # Create inputs directory if it doesn't exist
+    total_files = len(expected_files)
+    mandatory_file_key = "sales_fact"
     INPUTS_PATH.mkdir(parents=True, exist_ok=True)
 
-    def get_google_drive_direct_url(shared_url: str) -> str:
-        """Convert a Google Drive share link into a direct download URL."""
-        parsed = urlparse(shared_url.strip())
-        query_params = parse_qs(parsed.query)
-
-        if "id" in query_params:
-            file_id = query_params["id"][0]
-        else:
-            file_id = None
-            path_parts = [part for part in parsed.path.split("/") if part]
-            if "d" in path_parts:
-                d_index = path_parts.index("d")
-                if d_index + 1 < len(path_parts):
-                    file_id = path_parts[d_index + 1]
-
-        if not file_id and "/file/d/" in parsed.path:
-            try:
-                file_id = parsed.path.split("/file/d/")[1].split("/")[0]
-            except Exception:
-                file_id = None
-
-        if not file_id:
-            return shared_url
-
-        return f"https://drive.google.com/uc?export=download&id={file_id}"
+    def cache_sales_fact(file_path):
+        """Cache the parsed sales file in session state for this Streamlit session."""
+        try:
+            df = pd.read_csv(file_path)
+            if is_valid_sales_fact_df(df):
+                st.session_state["sales_fact_df"] = df
+            else:
+                st.session_state.pop("sales_fact_df", None)
+        except Exception:
+            st.session_state.pop("sales_fact_df", None)
 
     def save_csv_from_url(csv_url: str, file_path):
         """Download a CSV from a URL and save it to disk."""
-        direct_url = get_google_drive_direct_url(csv_url)
-        request = Request(direct_url, headers={"User-Agent": "Mozilla/5.0"})
-        with urlopen(request) as response:
-            content = response.read()
+        df = download_csv_from_url(csv_url, file_path)
+        if file_path.name == f"{mandatory_file_key}.csv":
+            st.session_state["sales_fact_df"] = df
 
-        if not content:
-            raise ValueError("The link returned no content.")
-
-        # Validate that the content is readable as CSV before saving.
-        pd.read_csv(BytesIO(content))
-
-        with open(file_path, "wb") as f:
-            f.write(content)
-
-    # Function to check file status
     def check_file_status():
         status_list = []
         ready_count = 0
-        
+
         for key, props in expected_files.items():
             file_path = INPUTS_PATH / f"{key}.csv"
             exists = file_path.exists() and file_path.stat().st_size > 0
-            
+
             if exists:
                 status_icon = "✅ Uploaded"
                 ready_count += 1
@@ -92,18 +68,35 @@ def page_data_upload():
                 "File Name": f"{key}.csv",
                 "Description": props["label"],
                 "Mandatory": "Yes" if props["mandatory"] else "No",
-                "Status": status_icon
+                "Status": status_icon,
             })
-        
+
         return pd.DataFrame(status_list), ready_count
 
-    st.header(f"📂 Data File Upload ({TOTAL_FILES} File Types)")
+    def get_sales_fact_df() -> pd.DataFrame | None:
+        """Return a valid sales_fact dataframe from session state or disk."""
+        cached_df = st.session_state.get("sales_fact_df")
+        if cached_df is not None and is_valid_sales_fact_df(cached_df):
+            return cached_df.copy()
+
+        sales_fact_path = INPUTS_PATH / f"{mandatory_file_key}.csv"
+        if sales_fact_path.exists() and sales_fact_path.stat().st_size > 0:
+            try:
+                df = pd.read_csv(sales_fact_path)
+                if is_valid_sales_fact_df(df):
+                    st.session_state["sales_fact_df"] = df
+                    return df.copy()
+            except Exception:
+                pass
+        return None
+
+    st.header(f"📂 Data File Upload ({total_files} File Types)")
 
     file_options = {props["label"]: key for key, props in expected_files.items()}
     selected_label = st.selectbox(
         "1. Select the file type to upload:",
         options=list(file_options.keys()),
-        key="file_select"
+        key="file_select",
     )
     selected_key = file_options[selected_label]
     st.caption(f"**Target File:** `{selected_key}.csv` ({expected_files[selected_key]['description']})")
@@ -112,11 +105,11 @@ def page_data_upload():
         f"2. Upload '{selected_key}.csv' (CSV file only)",
         type=["csv"],
         key="file_uploader",
-        label_visibility="visible"
+        label_visibility="visible",
     )
 
-    if selected_key == MANDATORY_FILE_KEY:
-        auto_sales_fact_path = INPUTS_PATH / f"{MANDATORY_FILE_KEY}.csv"
+    if selected_key == mandatory_file_key:
+        auto_sales_fact_path = INPUTS_PATH / f"{mandatory_file_key}.csv"
         if not auto_sales_fact_path.exists() or auto_sales_fact_path.stat().st_size == 0:
             try:
                 save_csv_from_url(SALES_FACT_DRIVE_URL, auto_sales_fact_path)
@@ -129,7 +122,9 @@ def page_data_upload():
         else:
             st.caption("Sales fact is already available locally. You can upload a new CSV to replace it.")
 
-    if selected_key == MANDATORY_FILE_KEY:
+        if auto_sales_fact_path.exists() and auto_sales_fact_path.stat().st_size > 0:
+            cache_sales_fact(auto_sales_fact_path)
+
         st.caption("You can still upload a CSV file here to replace the sales fact data.")
 
     if uploaded_file is not None:
@@ -137,7 +132,10 @@ def page_data_upload():
         try:
             with open(file_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
-            
+
+            if selected_key == mandatory_file_key:
+                cache_sales_fact(file_path)
+
             if file_path.exists() and file_path.stat().st_size > 0:
                 st.success(f"✅ **Success:** `{selected_key}.csv` saved to disk.")
             else:
@@ -145,16 +143,22 @@ def page_data_upload():
         except Exception as e:
             st.exception(f"Error saving file: {e}")
 
+    sales_fact_df = get_sales_fact_df()
+    if sales_fact_df is not None:
+        st.markdown("---")
+        st.subheader("Preview: `df_sales.head()`")
+        st.dataframe(sales_fact_df.head(), use_container_width=True, hide_index=True)
+
     st.markdown("---")
     st.header("📊 Data Ingestion Status")
 
     status_df, ready_count = check_file_status()
-    mandatory_ready = status_df[status_df["File Name"] == f"{MANDATORY_FILE_KEY}.csv"]["Status"].iloc[0] == "✅ Uploaded"
+    mandatory_ready = status_df[status_df["File Name"] == f"{mandatory_file_key}.csv"]["Status"].iloc[0] == "✅ Uploaded"
 
     st.dataframe(status_df, hide_index=True, use_container_width=True)
 
-    progress_percent = int((ready_count / TOTAL_FILES) * 100)
-    st.subheader(f"Overall Progress: {ready_count}/{TOTAL_FILES} Files Ready")
+    progress_percent = int((ready_count / total_files) * 100)
+    st.subheader(f"Overall Progress: {ready_count}/{total_files} Files Ready")
     st.progress(progress_percent)
 
     if mandatory_ready:
@@ -167,11 +171,10 @@ def page_data_upload():
     st.markdown("---")
     st.header("⚙️ Execute Forecasting Pipeline")
 
-    # Connect to scripts/main.py
     main_script_path = SCRIPTS_PATH / "main.py"
 
     if mandatory_ready:
-        if st.button("Run AI Forecasting Engine"):
+        if st.button("🚀 Run main.py"):
             with st.spinner("Running main.py... please wait"):
                 try:
                     if not main_script_path.exists():
@@ -189,7 +192,7 @@ def page_data_upload():
                                 "ML_MAX_COMBINATIONS": os.getenv("ML_MAX_COMBINATIONS", "10"),
                             },
                         )
-                        
+
                         if result.returncode == 0:
                             st.success("✅ `main.py` executed successfully!")
                             st.text_area("Console Output", result.stdout, height=200)
@@ -205,4 +208,3 @@ def page_data_upload():
 
     st.markdown("---")
     st.caption(f"💾 Files are stored in: `{INPUTS_PATH}`")
-
